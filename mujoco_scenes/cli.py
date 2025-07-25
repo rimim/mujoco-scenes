@@ -4,7 +4,7 @@ import argparse
 
 import mujoco.viewer
 
-from mujoco_scenes.mjcf import list_scenes, load_mjmodel
+from .mjcf import list_scenes, load_mjmodel
 
 
 def main() -> None:

@@ -9,7 +9,7 @@ import mujoco
 import numpy as np
 from etils import epath
 
-from mujoco_scenes.errors import ModelValidationError, TemplateDirectoryNotFoundError, TemplateNotFoundError
+from .errors import ModelValidationError, TemplateDirectoryNotFoundError, TemplateNotFoundError
 
 
 def get_template_dir() -> epath.Path:
