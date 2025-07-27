@@ -305,7 +305,6 @@ def load_mjmodel(
         scene_elem.append(child)
 
     full_xml = ET.tostring(scene_elem, encoding="unicode")
-    print(full_xml)
 
     # 7) Assets may also include scene‑specific ones
     scene_meshdir = _get_meshdir(scene_elem) or "assets"
