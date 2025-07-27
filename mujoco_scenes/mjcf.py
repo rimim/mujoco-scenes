@@ -2,6 +2,7 @@
 
 import itertools
 import re
+import os
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -180,26 +181,137 @@ def validate_model(mj: mujoco.MjModel) -> None:
                 raise NotImplementedError("Cylinders of half-length>0.001 are not supported for collision.")
 
 
-def load_mjmodel(path: str | Path | epath.Path, scene: str | None = None) -> mujoco.MjModel:
-    elem = ET.fromstring(epath.Path(path).read_text())
-    meshdir = _get_meshdir(elem)
-    assets = _find_assets(elem, epath.Path(path), meshdir)
-    xml = ET.tostring(elem, encoding="unicode")
+def load_mjmodel(
+    path: str | Path | epath.Path,
+    scene: str | None = None,
+    position_overrides: dict[str, dict[str, float]] | None = None,
+    class_overrides: dict[str, dict[str, float]] | None = None,
+) -> mujoco.MjModel:
+    """
+    path             Path to robot XML
+    scene            Optional scene name
+    position_overrides  { joint_name: { attr: value, … }, … } → overrides on <position> tags
+    class_overrides  { class_name: { attr: value, … }, … } → overrides on <default class="…"> children
+    """
+    path      = epath.Path(path)
+    robot_dir = path.parent
 
+    robot_text = path.read_text()
+    robot_elem = ET.fromstring(robot_text)
+
+    # apply per-joint overrides on <position> tags ---
+    if position_overrides:
+        for pos in robot_elem.iter("position"):
+            jn = pos.attrib.get("joint")
+            if jn in position_overrides:
+                for attr, val in position_overrides[jn].items():
+                    pos.set(attr, str(val))
+
+    if class_overrides:
+        for default in robot_elem.findall(".//default"):
+            cls = default.attrib.get("class")
+            if not cls:
+                # skip parent defaults
+                continue
+
+            if cls in class_overrides:
+                overrides = class_overrides[cls]
+                # for each child-tag you want to override (e.g. 'position', 'joint')
+                for tag_name, attrs in overrides.items():
+                    # find those child elements under this <default class="…">
+                    for child in default.findall(tag_name):
+                        for attr, val in attrs.items():
+                            child.set(attr, str(val))
+
+    comp = robot_elem.find(".//compiler")
+    if comp is not None:
+        # 1) pick up the paths (falling back to "assets" if missing)
+        mesh_base = (robot_dir / comp.attrib.get("meshdir", "assets")).resolve()
+        tex_base  = (robot_dir / comp.attrib.get("texturedir", "assets")).resolve()
+
+        # 2) remove those attributes so they don't linger in the final XML
+        comp.attrib.pop("meshdir", None)
+        comp.attrib.pop("texturedir", None)
+    else:
+        mesh_base = (robot_dir / "assets").resolve()
+        tex_base  = (robot_dir / "assets").resolve()
+
+    for mesh in robot_elem.iter("mesh"):
+        fname = mesh.attrib.get("file", "")
+        # only rewrite relative paths
+        if fname and not os.path.isabs(fname):
+            mesh.set("file", str(mesh_base / fname))
+
+    for tex in robot_elem.iter("texture"):
+        fname = tex.attrib.get("file", "")
+        if fname and not os.path.isabs(fname):
+            tex.set("file", str(tex_base / fname))
+
+    meshdir = _get_meshdir(robot_elem)
+    assets = _find_assets(robot_elem, epath.Path(path), meshdir)
+
+    robot_xml = ET.tostring(robot_elem, encoding="unicode")
     if scene is None:
-        mj = mujoco.MjModel.from_xml_string(xml, assets=assets)
-        return mj
+        return mujoco.MjModel.from_xml_string(robot_xml, assets=assets)
 
-    scene_path = get_scene(scene)
+    if scene and os.path.isabs(scene):
+        scene_path = scene
+    else:
+        scene_path = get_scene(scene)
     scene_text = scene_path.read_text()
-    if (robot_match := re.search(r"<mujoco model=\"(.*)\"", xml)) is None:
+    if (robot_match := re.search(r"<mujoco model=\"(.*)\"", robot_xml)) is None:
         robot_name = "robot"
     else:
         robot_name = robot_match.group(1)
     scene_text = scene_text.format(name=robot_name, path=path)
     scene_elem = ET.fromstring(scene_text)
-    assets.update(_find_assets(scene_elem, scene_path, meshdir))
-    scene_xml = ET.tostring(scene_elem, encoding="unicode")
-    mj = mujoco.MjModel.from_xml_string(scene_xml, assets=assets)
 
-    return mj
+    # Find the <include> that brings in the robot.xml, drop it
+    model_path = Path(path).resolve()
+    model_name = model_path.name
+
+    for inc in scene_elem.findall(".//include"):
+        file_attr = inc.attrib.get("file", "")
+        inc_path = Path(file_attr)
+
+        # decide if this <include> refers to our robot.xml
+        if inc_path.is_absolute():
+            try:
+                match = inc_path.resolve() == model_path
+            except FileNotFoundError:
+                match = False
+        else:
+            # relative: just compare the filenames
+            match = (inc_path.name == model_name)
+
+        if match:
+            # remove it
+            parent = None
+            # xml.etree doesn’t have getparent(), so find the parent manually:
+            for p in scene_elem.iter():
+                if inc in list(p):
+                    parent = p
+                    break
+
+            if parent is None:
+                scene_elem.remove(inc)
+            else:
+                parent.remove(inc)
+            break
+
+    # 6) Inline the patched robot XML under <mujoco> in the scene
+    #    (insert all children of robot_elem into scene_elem)
+    for child in list(robot_elem):
+        scene_elem.append(child)
+
+    full_xml = ET.tostring(scene_elem, encoding="unicode")
+    print(full_xml)
+
+    # 7) Assets may also include scene‑specific ones
+    scene_meshdir = _get_meshdir(scene_elem) or "assets"
+    assets.update(_find_assets(scene_elem, scene_path, scene_meshdir))
+
+    # 8) Serialize & return
+    full_xml = ET.tostring(scene_elem, encoding="unicode")
+    return mujoco.MjModel.from_xml_string(full_xml, assets=assets)
+
