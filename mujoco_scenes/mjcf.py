@@ -186,17 +186,57 @@ def load_mjmodel(
     scene: str | None = None,
     position_overrides: dict[str, dict[str, float]] | None = None,
     class_overrides: dict[str, dict[str, float]] | None = None,
+    options: dict[str, bool] | None = None,
 ) -> mujoco.MjModel:
     """
     path             Path to robot XML
     scene            Optional scene name
     position_overrides  { joint_name: { attr: value, … }, … } → overrides on <position> tags
     class_overrides  { class_name: { attr: value, … }, … } → overrides on <default class="…"> children
+    options          Feature flags, e.g. {'high-res': True, 'geometric_foot_pad': False}
     """
     path      = epath.Path(path)
     robot_dir = path.parent
+    options   = options or {}
 
     robot_text = path.read_text()
+    for feature, enabled in options.items():
+        # patterns
+        start_on  = rf"<!--\s*@START:{feature}@"
+        end_on    = rf"@END:{feature}@\s*-->"
+        start_off = rf"<!--\s*@START:!{feature}@"
+        end_off   = rf"@END:!{feature}@\s*-->"
+
+        if enabled:
+            # remove disabled block
+            robot_text = re.sub(
+                rf"{start_off}.*?{end_off}",
+                "",
+                robot_text,
+                flags=re.DOTALL,
+            )
+            # uncomment enabled block
+            robot_text = re.sub(
+                rf"{start_on}\s*(.*?)\s*{end_on}",
+                r"\1",
+                robot_text,
+                flags=re.DOTALL,
+            )
+        else:
+            # remove enabled block
+            robot_text = re.sub(
+                rf"{start_on}.*?{end_on}",
+                "",
+                robot_text,
+                flags=re.DOTALL,
+            )
+            # uncomment disabled block
+            robot_text = re.sub(
+                rf"{start_off}\s*(.*?)\s*{end_off}",
+                r"\1",
+                robot_text,
+                flags=re.DOTALL,
+            )
     robot_elem = ET.fromstring(robot_text)
 
     # apply per-joint overrides on <position> tags ---
