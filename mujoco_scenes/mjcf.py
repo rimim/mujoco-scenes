@@ -275,7 +275,11 @@ def load_mjmodel(
                     # find those child elements under this <default class="…">
                     for child in default.findall(tag_name):
                         for attr, val in attrs.items():
-                            child.set(attr, str(val))
+                            if isinstance(val, (list, tuple)):
+                                val_str = " ".join(str(item) for item in val)
+                            else:
+                                val_str = str(val)
+                            child.set(attr, val_str)
 
     comp = robot_elem.find(".//compiler")
     if comp is not None:
