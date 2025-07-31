@@ -5,6 +5,8 @@ import re
 import os
 from pathlib import Path
 from xml.etree import ElementTree as ET
+from types import SimpleNamespace
+from weakref import WeakKeyDictionary
 
 import mujoco
 import numpy as np
@@ -12,6 +14,7 @@ from etils import epath
 
 from .errors import ModelValidationError, TemplateDirectoryNotFoundError, TemplateNotFoundError
 
+_model_extras = WeakKeyDictionary()
 
 def get_template_dir() -> epath.Path:
     if not (template_dir := epath.Path(__file__).parent / "templates").exists():
@@ -180,6 +183,17 @@ def validate_model(mj: mujoco.MjModel) -> None:
             if halflength > 0.001 and mask > 0:
                 raise NotImplementedError("Cylinders of half-length>0.001 are not supported for collision.")
 
+def set_mjmodel_info(model, class_gains, actuator_gains, robot_xml, scene_xml, keyframes):
+    _model_extras[model] = {
+        "class_gains":    class_gains,
+        "actuator_gains": actuator_gains,
+        "robot_xml":      robot_xml,
+        "scene_xml":      scene_xml,
+        "keyframes":      keyframes
+    }
+
+def get_mjmodel_info(model):
+    return _model_extras.get(model, {})
 
 def load_mjmodel(
     path: str | Path | epath.Path,
@@ -290,15 +304,85 @@ def load_mjmodel(
     meshdir = _get_meshdir(robot_elem)
     assets = _find_assets(robot_elem, epath.Path(path), meshdir)
 
+    class_gains = {}
+    for default in robot_elem.findall(".//default[@class]"):
+        cls = default.get("class")
+        pos = default.find("position")
+        if cls and pos is not None:
+            kp = float(pos.get("kp", 0.0))
+            kv = float(pos.get("kv", 0.0))
+            class_gains[cls] = (kp, kv)
+
+    actuator_gains = {}
+    for pos in robot_elem.findall(".//actuator/position"):
+        name = pos.get("name")
+        cls  = pos.get("class")
+        if not name or not cls:
+            continue
+        # start from the class defaults (0.0, 0.0 if unknown)
+        kp, kv = class_gains.get(cls, (0.0, 0.0))
+        # override if this <position> tag has its own kp/kv
+        if pos.get("kp") is not None:
+            kp = float(pos.get("kp"))
+        if pos.get("kv") is not None:
+            kv = float(pos.get("kv"))
+        actuator_gains[name] = (kp, kv)
+
     robot_xml = ET.tostring(robot_elem, encoding="unicode")
+
     if scene is None:
-        return mujoco.MjModel.from_xml_string(robot_xml, assets=assets)
+        model = mujoco.MjModel.from_xml_string(robot_xml, assets=assets)
+        set_mjmodel_info(model,
+            class_gains=class_gains,
+            actuator_gains=actuator_gains,
+            robot_xml=robot_xml,
+            scene_xml=None,
+            keyframes={}
+        )
+        return model
 
     if scene and os.path.isabs(scene):
         scene_path = scene
     else:
         scene_path = get_scene(scene)
     scene_text = scene_path.read_text()
+    for feature, enabled in options.items():
+        # patterns
+        start_on  = rf"<!--\s*@START:{feature}@"
+        end_on    = rf"@END:{feature}@\s*-->"
+        start_off = rf"<!--\s*@START:!{feature}@"
+        end_off   = rf"@END:!{feature}@\s*-->"
+
+        if enabled:
+            # remove disabled block
+            scene_text = re.sub(
+                rf"{start_off}.*?{end_off}",
+                "",
+                scene_text,
+                flags=re.DOTALL,
+            )
+            # uncomment enabled block
+            scene_text = re.sub(
+                rf"{start_on}\s*(.*?)\s*{end_on}",
+                r"\1",
+                scene_text,
+                flags=re.DOTALL,
+            )
+        else:
+            # remove enabled block
+            scene_text = re.sub(
+                rf"{start_on}.*?{end_on}",
+                "",
+                scene_text,
+                flags=re.DOTALL,
+            )
+            # uncomment disabled block
+            scene_text = re.sub(
+                rf"{start_off}\s*(.*?)\s*{end_off}",
+                r"\1",
+                scene_text,
+                flags=re.DOTALL,
+            )
     if (robot_match := re.search(r"<mujoco model=\"(.*)\"", robot_xml)) is None:
         robot_name = "robot"
     else:
@@ -344,13 +428,34 @@ def load_mjmodel(
     for child in list(robot_elem):
         scene_elem.append(child)
 
-    full_xml = ET.tostring(scene_elem, encoding="unicode")
-
     # 7) Assets may also include scene‑specific ones
     scene_meshdir = _get_meshdir(scene_elem) or "assets"
     assets.update(_find_assets(scene_elem, scene_path, scene_meshdir))
 
-    # 8) Serialize & return
+    keyframes: dict[str, SimpleNamespace] = {}
+    # find each <keyframe>, then its <key> child
+    for kf in scene_elem.findall(".//keyframe"):
+        for key in kf.findall("key"):
+            name   = key.attrib.get("name")
+            qpos_s = key.attrib.get("qpos", "")
+            ctrl_s = key.attrib.get("ctrl", "")
+            if not name:
+                continue
+
+            # parse the space‑delimited strings into arrays
+            qpos = np.fromstring(qpos_s, sep=" ", dtype=np.float32)
+            ctrl = np.fromstring(ctrl_s, sep=" ", dtype=np.float32)
+
+            keyframes[name] = SimpleNamespace(qpos=qpos, ctrl=ctrl)
+
     full_xml = ET.tostring(scene_elem, encoding="unicode")
-    return mujoco.MjModel.from_xml_string(full_xml, assets=assets)
+    model = mujoco.MjModel.from_xml_string(full_xml, assets=assets)
+    set_mjmodel_info(model,
+        class_gains=class_gains,
+        actuator_gains=actuator_gains,
+        robot_xml=robot_xml,
+        scene_xml=full_xml,
+        keyframes=keyframes
+    )
+    return model
 
