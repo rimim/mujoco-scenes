@@ -1,0 +1,94 @@
+<mujoco model="{name} terrain course">
+  <!-- include robot model -->
+  <include file="{path}"/>
+
+  <!--
+    Rough-terrain course for biped training.
+
+    Units: meters, kilograms, seconds.
+    Coordinate frame: +X forward, +Y left, +Z up.
+
+    Robot dimensions you provided (approx):
+      foot length 7"  ~= 0.1778 m
+      ankle->knee 5"  ~= 0.1270 m
+      knee->hip 5"    ~= 0.1270 m
+      neutral stance width (feet apart) 7" ~= 0.1778 m
+      height (straight, neck extended) 27" ~= 0.6858 m
+
+    Terrain design choices (tuned to those sizes):
+      - rough patch: +/- 2 cm (heightfield elevation_z=0.04 and geom z-offset -0.02)
+      - ramps: ~4.6° up and down (8 cm rise over 1 m)
+      - steps: 4 cm up/down with 25 cm tread depth (tread > foot length)
+      - flat segments sprinkled throughout to prevent forgetting flat locomotion
+  -->
+
+  <!-- <compiler angle="degree" coordinate="local" inertiafromgeom="true"/> -->
+  <option timestep="0.002" integrator="RK4" gravity="0 0 -9.81" />
+
+  <default>
+    <!-- Mildly grippy ground. Adjust the first friction value if you slip too much. -->
+    <geom condim="3" friction="1.2 0.005 0.0001" solref="0.01 1" solimp="0.9 0.95 0.001 0.5 2"/>
+  </default>
+
+  <asset>
+    <texture name="tex_ground" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.18 0.25 0.18" rgb2="0.10 0.16 0.10"/>
+    <material name="mat_ground" texture="tex_ground" texrepeat="4 4" reflectance="0.05"/>
+
+    <!-- Heightfield patch: 4 m (X) by 2 m (Y), with max elevation 4 cm and 20 cm base thickness. -->
+    <hfield name="rough_patch" file="rough_patch.png" size="2 1 0.04 0.20"/>
+  </asset>
+
+  <worldbody>
+    <light name="sun" pos="0 0 4" dir="0.2 0.2 -1" directional="true" diffuse="1 1 1" specular="0.2 0.2 0.2"/>
+    <camera name="track" mode="trackcom" pos="0 -3 1.2" xyaxes="1 0 0 0 0 1"/>
+
+    <!-- Catch plane below everything (helps when the robot falls off the course). -->
+    <geom name="catch_plane" type="plane" size="50 50 0.25" pos="0 0 -1.0" material="mat_ground"/>
+
+    <!-- ===== COURSE GEOMETRY ===== -->
+
+    <!-- Flat start platform: x in [-2, 0] -->
+    <geom name="flat_start" type="box" size="1.0 1.0 0.05" pos="-1.0 0 -0.05" material="mat_ground"/>
+
+    <!-- Rough patch heightfield: x in [0, 4], centered at x=2.
+         We shift it down by 2 cm so that value ~0.5 corresponds to z~0. -->
+    <geom name="rough" type="hfield" hfield="rough_patch" pos="2.0 0 -0.02" material="mat_ground"/>
+
+    <!-- Flat recovery: x in [4, 5] -->
+    <geom name="flat_mid" type="box" size="0.5 1.0 0.05" pos="4.5 0 -0.05" material="mat_ground"/>
+
+    <!-- Ramp up: x in [5, 6], +8 cm rise (approx 4.6 deg). -->
+    <geom name="ramp_up" type="box" size="0.5 1.0 0.05" pos="5.5 0 -0.00984" euler="0 -4.59 0" material="mat_ground"/>
+
+    <!-- Ramp down: x in [6, 7], back to z=0. -->
+    <geom name="ramp_down" type="box" size="0.5 1.0 0.05" pos="6.5 0 -0.00984" euler="0 4.59 0" material="mat_ground"/>
+
+    <!-- Flat before steps: x in [7.0, 7.5] -->
+    <geom name="flat_pre_steps" type="box" size="0.25 1.0 0.05" pos="7.25 0 -0.05" material="mat_ground"/>
+
+    <!-- Steps: 25 cm treads, 4 cm risers.
+         Sequence: 0 -> 4cm -> 8cm -> 8cm -> 4cm -> 0 -->
+    <geom name="step1_up4cm"  type="box" size="0.125 1.0 0.05" pos="7.625 0 -0.01" material="mat_ground"/>
+    <geom name="step2_up8cm"  type="box" size="0.125 1.0 0.05" pos="7.875 0  0.03" material="mat_ground"/>
+    <geom name="step3_hold8cm" type="box" size="0.125 1.0 0.05" pos="8.125 0  0.03" material="mat_ground"/>
+    <geom name="step4_dn4cm"  type="box" size="0.125 1.0 0.05" pos="8.375 0 -0.01" material="mat_ground"/>
+    <geom name="step5_flat"   type="box" size="0.125 1.0 0.05" pos="8.625 0 -0.05" material="mat_ground"/>
+
+    <!-- Flat finish: x in [8.75, 10.75] -->
+    <geom name="flat_finish" type="box" size="1.0 1.0 0.05" pos="9.75 0 -0.05" material="mat_ground"/>
+
+    <!-- Spawn marker (visual only). Put your robot root above this. -->
+    <site name="spawn" pos="-1.6 0 0.0" size="0.03" rgba="0 1 0 1"/>
+
+    <!-- Optional: visual rails (non-colliding) to show the course width -->
+    <geom name="rail_left"  type="box" size="6.0 0.03 0.05" pos="4.0  1.05 0.05" rgba="0.2 0.2 0.2 0.4" contype="0" conaffinity="0"/>
+    <geom name="rail_right" type="box" size="6.0 0.03 0.05" pos="4.0 -1.05 0.05" rgba="0.2 0.2 0.2 0.4" contype="0" conaffinity="0"/>
+
+    <!--
+      To add your robot, either:
+        A) paste the robot body into this <worldbody>, or
+        B) use <include file="your_biped.xml"/> at the top-level (but then this file won't load standalone).
+    -->
+  </worldbody>
+</mujoco>

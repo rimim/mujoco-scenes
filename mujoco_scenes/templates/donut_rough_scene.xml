@@ -1,0 +1,36 @@
+<mujoco model="{name} donut_rough_scene">
+  <include file="{path}" />
+
+
+  <visual>
+    <!-- Keep this low; shadows are expensive -->
+    <quality shadowsize="32000"/>
+  </visual>
+
+  <asset>
+    <material name="ground_mat"
+              rgba="0.5 0.5 0.5 1"
+              reflectance="0."
+              shininess="0.1"/>
+    <hfield name="donut"
+            file="circular_donut_hfield.png"
+            size="15 15 0.1 0.01" />
+  </asset>
+
+  <worldbody>
+    <light name="sun"
+           directional="true"
+           pos="0 0 5"
+           dir="0.3 0.2 -1"
+           diffuse="1 1 1"
+           specular="0.1 0.1 0.1"/>
+    <geom name="floor"
+          type="hfield"
+          hfield="donut"
+          pos="0 0 -0.1"
+          contype="1"
+          conaffinity="1"
+          material="ground_mat"
+          friction="1 0.005 0.0001"/>
+  </worldbody>
+</mujoco>

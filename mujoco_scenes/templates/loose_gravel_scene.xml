@@ -1,0 +1,46 @@
+<mujoco model="{name} loose gravel terrain scene">
+  <include file="{path}"/>
+
+  <statistic center="0 0 0.1" extent="0.8" meansize="0.04"/>
+
+  <visual>
+    <headlight diffuse="1 1 1" ambient=".55 .55 .55" specular=".12 .12 .12"/>
+    <rgba force="1 0 0 1"/>
+    <global azimuth="120" elevation="-20"/>
+    <map force="0.01"/>
+    <scale forcewidth="0.3" contactwidth="0.5" contactheight="0.2"/>
+    <quality shadowsize="8192"/>
+  </visual>
+
+  <asset>
+    <texture type="skybox" builtin="gradient"
+             rgb1="0.55 0.70 0.90"
+             rgb2="0.72 0.72 0.72"
+             width="512" height="3072"/>
+
+    <texture type="2d" name="groundplane" file="loose_gravel_texture.png"/>
+    <material name="groundplane"
+              texture="groundplane"
+              texuniform="true"
+              texrepeat="8 8"
+              rgba="1 1 1 1"
+              reflectance="0.03"/>
+
+    <!-- size = x y elevation-range elevation-base.
+         Try elevation-range 0.02-0.06 depending on how aggressive you want the gravel. -->
+    <hfield name="hfield" file="loose_gravel_hfield.png" size="10 10 0.035 0.01"/>
+  </asset>
+
+  <worldbody>
+    <body name="floor">
+      <geom name="floor"
+            type="hfield"
+            hfield="hfield"
+            material="groundplane"
+            contype="1"
+            conaffinity="0"
+            priority="1"
+            friction="1.25 0.01 0.001"/>
+    </body>
+  </worldbody>
+</mujoco>

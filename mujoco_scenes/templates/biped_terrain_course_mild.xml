@@ -1,0 +1,81 @@
+<mujoco model="{name} terrain course mild">
+
+  <include file="{path}"/>
+  <!--
+    Mixed flat + rough + slopes + small steps for a ~0.69 m tall biped (7" foot).
+    NOTE: Ramps use quat (not euler) so this works regardless of compiler angle units.
+  -->
+  <compiler coordinate="local"  angle="degree"/>
+  <option timestep="0.002" gravity="0 0 -9.81" iterations="50" solver="Newton" cone="pyramidal"/>
+
+  <default>
+    <!-- Slightly grippy ground. Adjust friction[0] for more/less traction. -->
+    <geom condim="4" friction="1.0 0.005 0.0001" solref="0.01 1" solimp="0.9 0.95 0.001 0.5 2"/>
+  </default>
+
+  <asset>
+    <!-- Heightfield: size = (radius_x, radius_y, elevation_z, base_z) -->
+    <hfield name="rough_patch" file="rough_patch.png" size="2.0 1.0 0.03 0.20"/>
+
+    <texture name="tex_ground" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.18 0.22 0.18" rgb2="0.22 0.28 0.22"/>
+    <material name="mat_ground" texture="tex_ground" texrepeat="6 2" reflectance="0.02" rgba="0.75 0.85 0.75 1"/>
+  </asset>
+
+  <worldbody>
+    <light name="sun" pos="0 0 4" dir="0.2 0.2 -1" directional="true" diffuse="1 1 1" specular="0.2 0.2 0.2"/>
+    <camera name="track" mode="trackcom" pos="0 -3 1.2" xyaxes="1 0 0 0 0 1"/>
+
+    <!-- Catch plane below everything (helps when the robot falls off). -->
+    <geom name="catch_plane" type="plane" size="50 50 0.25" pos="0 0 -1.0" material="mat_ground"/>
+
+    <!-- ===== COURSE GEOMETRY (top surface ~ z=0 unless noted) ===== -->
+
+    <!-- Flat start platform: x in [-2, 0] -->
+    <geom name="flat_start" type="box" size="1.0 1.0 0.05" pos="-1.0 0 -0.05" material="mat_ground"/>
+
+    <!-- Rough patch heightfield: x in [0, 4], centered at x=2.
+         elevation_z=0.03 so max variation is 3 cm; offset -0.015 centers it around z=0. -->
+    <geom name="rough" type="hfield" hfield="rough_patch" pos="2.0 0 -0.015" material="mat_ground"/>
+
+    <!-- Flat recovery: x in [4, 5] -->
+    <geom name="flat_mid" type="box" size="0.5 1.0 0.05" pos="4.5 0 -0.05" material="mat_ground"/>
+
+    <!-- Gentle ramp up: length 1.0 m, rise 5 cm (~2.86 deg).
+         Using quat so it won't turn into a wall if your main model uses angle="radian". -->
+    <geom name="ramp_up" type="box"
+          size="0.500 1.0 0.050"
+          pos="5.5 0 -0.024969"
+          quat="0.999688036 0.000000000 -0.055976600 0.000000000"
+          material="mat_ground"/>
+
+    <!-- Gentle ramp down back to z=0. -->
+    <geom name="ramp_down" type="box"
+          size="0.500 1.0 0.050"
+          pos="6.5 0 -0.024906"
+          quat="0.999688036 0.000000000 0.055976600 0.000000000"
+          material="mat_ground"/>
+
+    <!-- Flat before steps: x in [7.0, 7.5] -->
+    <geom name="flat_pre_steps" type="box" size="0.25 1.0 0.05" pos="7.25 0 -0.05" material="mat_ground"/>
+
+    <!-- Small steps: 25 cm treads, 3 cm risers.
+         Sequence: 0 -> 3cm -> 6cm -> 6cm -> 3cm -> 0 -->
+    <geom name="step1_up3cm"     type="box" size="0.125 1.0 0.05" pos="7.625 0 -0.020" material="mat_ground"/>
+    <geom name="step2_up6cm"     type="box" size="0.125 1.0 0.05" pos="7.875 0  0.010" material="mat_ground"/>
+    <geom name="step3_hold6cm"   type="box" size="0.125 1.0 0.05" pos="8.125 0  0.010" material="mat_ground"/>
+    <geom name="step4_down3cm"   type="box" size="0.125 1.0 0.05" pos="8.375 0 -0.020" material="mat_ground"/>
+    <geom name="step5_back_flat" type="box" size="0.125 1.0 0.05" pos="8.625 0 -0.050" material="mat_ground"/>
+
+    <!-- Flat finish: x in [8.75, 10.75] -->
+    <geom name="flat_finish" type="box" size="1.0 1.0 0.05" pos="9.75 0 -0.05" material="mat_ground"/>
+
+    <!-- Spawn marker (visual only). Put your robot root above this. -->
+    <site name="spawn" pos="-1.6 0 0.0" size="0.03" rgba="0 1 0 1"/>
+
+    <!-- Optional low rails (non-colliding) to show course width -->
+    <geom name="rail_left"  type="box" size="6.0 0.03 0.05" pos="4.0  1.05 0.05" rgba="0.2 0.2 0.2 0.25" contype="0" conaffinity="0"/>
+    <geom name="rail_right" type="box" size="6.0 0.03 0.05" pos="4.0 -1.05 0.05" rgba="0.2 0.2 0.2 0.25" contype="0" conaffinity="0"/>
+
+  </worldbody>
+</mujoco>

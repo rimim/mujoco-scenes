@@ -1,0 +1,174 @@
+<mujoco model="{name} slope stairs scene">
+  <include file="{path}"/>
+
+  <default>
+    <geom friction="1.5 0.01 0.0006"/>
+  </default>
+
+  <visual>
+    <headlight diffuse="0.6 0.6 0.6" ambient="0.3 0.3 0.3" specular="0 0 0" />
+    <rgba haze="0.15 0.25 0.35 1" />
+    <global azimuth="150" elevation="-10" />
+  </visual>
+
+  <statistic center="0 0 .3" extent="0.6"/>
+
+  <asset>
+    <texture type="skybox" builtin="gradient"
+             rgb1="0.3 0.5 0.7"
+             rgb2="0 0 0"
+             width="512"
+             height="3072" />
+
+    <texture type="2d" name="groundplane" builtin="checker" mark="edge"
+             rgb1="0.2 0.3 0.4"
+             rgb2="0.1 0.2 0.3"
+             markrgb="0.8 0.8 0.8"
+             width="300"
+             height="300" />
+
+    <material name="groundplane"
+              texture="groundplane"
+              texuniform="true"
+              texrepeat="5 5"
+              reflectance="0.2" />
+
+    <material name="stair_mat"
+              rgba="0.35 0.35 0.35 1"
+              reflectance="0.08"/>
+
+    <!-- Heightfield from slope.png -->
+    <!-- slope.png must be grayscale, gradient left→right -->
+    <!-- size = [sx sy sz sh]: half-length, half-width, max height, skirt -->
+    <hfield name="slope_hf"
+            file="slope.png"
+            nrow="64"
+            ncol="256"
+            size="3 1 0.6 0.1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0 0 3" dir="0 0 -1" directional="false" />
+
+    <body name="floor">
+      <!-- Infinite flat plane -->
+      <geom pos="0 0 0"
+            name="floor"
+            size="0 0 .125"
+            type="plane"
+            material="groundplane"
+            conaffinity="1"
+            contype="1" />
+
+      <!-- Sloped hill: centered at x=5, half-length=3, so x spans 2..8 -->
+      <geom name="slope"
+            type="hfield"
+            hfield="slope_hf"
+            pos="5 0 0"
+            material="groundplane"
+            contype="1"
+            conaffinity="1"/>
+
+      <!-- Stairs descending after the slope.
+           Each tread is 0.15 m long in X.
+           box size = half-length, half-width, half-height.
+           Slope ends around x=8.0 at z=0.60. -->
+
+      <geom name="stair_00"
+            type="box"
+            pos="8.075 0 0.300"
+            size="0.075 0.95 0.300"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_01"
+            type="box"
+            pos="8.225 0 0.275"
+            size="0.075 0.95 0.275"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_02"
+            type="box"
+            pos="8.375 0 0.250"
+            size="0.075 0.95 0.250"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_03"
+            type="box"
+            pos="8.525 0 0.225"
+            size="0.075 0.95 0.225"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_04"
+            type="box"
+            pos="8.675 0 0.200"
+            size="0.075 0.95 0.200"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_05"
+            type="box"
+            pos="8.825 0 0.175"
+            size="0.075 0.95 0.175"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_06"
+            type="box"
+            pos="8.975 0 0.150"
+            size="0.075 0.95 0.150"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_07"
+            type="box"
+            pos="9.125 0 0.125"
+            size="0.075 0.95 0.125"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_08"
+            type="box"
+            pos="9.275 0 0.100"
+            size="0.075 0.95 0.100"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_09"
+            type="box"
+            pos="9.425 0 0.075"
+            size="0.075 0.95 0.075"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_10"
+            type="box"
+            pos="9.575 0 0.050"
+            size="0.075 0.95 0.050"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+
+      <geom name="stair_11"
+            type="box"
+            pos="9.725 0 0.025"
+            size="0.075 0.95 0.025"
+            material="stair_mat"
+            contype="1"
+            conaffinity="1"/>
+    </body>
+  </worldbody>
+</mujoco>

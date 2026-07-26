@@ -1,0 +1,38 @@
+<mujoco model="{name} rough mix terrain scene">
+  <!-- include robot model -->
+  <include file="{path}"/>
+
+
+  <default>
+    <geom condim="4" friction="1.0 0.005 0.0001" solref="0.01 1" solimp="0.9 0.95 0.001 0.5 2"/>
+  </default>
+
+  <asset>
+    <!-- Height field: size = (radius_x, radius_y, elevation_z, base_z) -->
+    <hfield name="terrain" file="rough_mix_terrain.png" size="6.0 1.5 0.045 0.2"/>
+
+    <texture name="tex_ground" type="2d" builtin="checker" width="512" height="512"
+             rgb1="0.20 0.25 0.20" rgb2="0.24 0.30 0.24"/>
+    <material name="mat_ground" texture="tex_ground" texrepeat="6 2" reflectance="0.02" rgba="0.7 0.8 0.7 1"/>
+  </asset>
+
+  <worldbody>
+    <!-- Terrain is centered at origin; x spans [-6.0, 6.0] and y spans [-1.5, 1.5] -->
+    <geom name="terrain_geom" type="hfield" hfield="terrain" pos="0 0 0" material="mat_ground"/>
+
+    <!-- Optional guard rails (low) to keep the robot from exiting the 3m-wide track -->
+    <geom name="rail_left"  type="box" pos="0 1.55 0.06" size="6.0 0.05 0.06" rgba="0.4 0.4 0.4 1"/>
+    <geom name="rail_right" type="box" pos="0 -1.55 0.06" size="6.0 0.05 0.06" rgba="0.4 0.4 0.4 1"/>
+    <geom name="rail_front" type="box" pos="6.05 0 0.06" size="0.05 1.6 0.06" rgba="0.4 0.4 0.4 1"/>
+    <geom name="rail_back"  type="box" pos="-6.05 0 0.06" size="0.05 1.6 0.06" rgba="0.4 0.4 0.4 1"/>
+
+    <!-- Lighting and cameras -->
+    <light name="sun" pos="0 0 3.0" dir="0 0 -1" directional="true" diffuse="1 1 1" specular="0.2 0.2 0.2"/>
+    <camera name="overview" pos="-3.5999999999999996 -3.3000000000000003 1.2" euler="20 0 20"/>
+    <camera name="side"     pos="0 -3.9000000000000004 0.9" euler="15 0 0"/>
+
+    <!-- Helpful sites: start and goal -->
+    <site name="start" pos="-5.3 0 0.05" size="0.03" rgba="0 1 0 1"/>
+    <site name="goal"  pos="5.3 0 0.05" size="0.03" rgba="1 0 0 1"/>
+  </worldbody>
+</mujoco>
